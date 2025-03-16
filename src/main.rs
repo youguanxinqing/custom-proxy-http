@@ -1,15 +1,13 @@
 use std::fmt::Display;
 
 use actix_web::{
-    App, HttpRequest, HttpResponse, HttpServer, ResponseError,
-    body::BoxBody,
-    http::{
+    body::BoxBody, http::{
         self,
         header::{self},
-    },
-    web,
+    }, web, App, HttpMessage, HttpRequest, HttpResponse, HttpServer, ResponseError
 };
 use clap::Parser;
+use futures_util::TryFutureExt;
 use log::{debug, info};
 
 async fn proxy_api(
@@ -24,6 +22,13 @@ async fn proxy_api(
     if target_url.is_none() {
         return Ok(HttpResponse::BadRequest().body(format!("bad url format: {}", req.full_url())));
     }
+    
+    let mut target_headers = reqwest::header::HeaderMap::new();
+    req.headers().iter().filter(|(key, _)| *key != "host").for_each(|(key, val)| {
+        target_headers.insert(
+            reqwest::header::HeaderName::from_bytes(key.as_str().as_bytes()).unwrap(), 
+            reqwest::header::HeaderValue::from_bytes(val.as_bytes()).unwrap());
+    });
 
     // 2. send proxied request to target server
     let target_resp = http_client
@@ -31,6 +36,8 @@ async fn proxy_api(
             reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap(),
             target_url.unwrap().to_string(),
         )
+        .body(_payload.to_bytes().map_err(|err| anyhow::anyhow!("{}", err)).await?)
+        .headers(target_headers)
         .send()
         .await
         .map_err(|err| anyhow::anyhow!("{}", err))?;
