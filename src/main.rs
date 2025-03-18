@@ -12,7 +12,9 @@ use clap::Parser;
 use futures::StreamExt;
 use futures::channel::mpsc;
 use log::{debug, info};
+use tracing::instrument;
 
+#[instrument(skip(payload))]
 async fn proxy_api(
     req: HttpRequest,
     method: http::Method,
@@ -107,6 +109,7 @@ impl From<anyhow::Error> for Error {
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
+    tracing_subscriber::fmt().finish();
 
     let args = CommandArgs::parse();
     debug!("command args: {:?}", args);
